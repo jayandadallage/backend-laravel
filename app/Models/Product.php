@@ -19,7 +19,8 @@ class Product extends Model
         'description',
         'image',
         'created_by',
-        'created_at'
+        'created_at',
+        'updated_at'
     ];
 
 }

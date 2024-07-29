@@ -1,14 +1,18 @@
 <?php
 namespace App\Http\Controllers;
+
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 
 class ProductController extends Controller
 {
     public function index()
     {
-        $products = Product::all()->where("created_by",Auth::user()->id);
+        $products = Product::where("created_by", Auth::user()->id)->get();
         return response()->json($products, 200);
     }
 
@@ -26,20 +30,20 @@ class ProductController extends Controller
             $imagePath = $request->file('image')->store('public/images');
             $validatedData['image'] = $imagePath;
         }
-        try{
-            $product=Product::create([
+
+        try {
+            $product = Product::create([
                 'name' => $validatedData['name'],
                 'price' => $validatedData['price'],
                 'description' => $validatedData['description'],
-                'image' => $validatedData['image'],
-                'created_by' =>Auth::id(),
-                'created_at' => NOW()
+                'image' => $validatedData['image'] ?? null,
+                'created_by' => Auth::id(),
+                'created_at' => now()
             ]);
             return response()->json($product, 201);
-        }catch(\Exception $e){
-            $error_obj=array('Code' => 405,'Status'=>'Fail','Message'=> 'Failure In Adding Transactions'.$e );
-            return response()->json($error_obj);
-        } 
+        } catch (\Exception $e) {
+            return response()->json(['Code' => 405, 'Status' => 'Fail', 'Message' => 'Failure In Adding Transactions: ' . $e->getMessage()], 500);
+        }
     }
 
     public function show($id)
@@ -52,14 +56,60 @@ class ProductController extends Controller
     }
 
     public function update(Request $request, $id)
-    {
-        $product = Product::find($id);
-        if (is_null($product)) {
-            return response()->json(['message' => 'Product not found'], 404);
-        }
-        $product->update($request->all());
-        return response()->json($product, 200);
+{
+    // Log raw request data
+    Log::debug('Raw Request Data:', $request->all());
+
+    // Check if the request is an instance of FormData
+    if ($request->hasFile('image')) {
+        Log::debug('Request contains file upload');
     }
+
+    // Find the product
+    $product = Product::find($id);
+    if (is_null($product)) {
+        Log::error("Product not found with ID: $id");
+        return response()->json(['message' => 'Product not found'], 404);
+    }
+
+    // Manually validate the request data and log validation errors
+    $validator = Validator::make($request->all(), [
+        'name' => 'sometimes|required|string|max:255',
+        'price' => 'sometimes|required|numeric',
+        'description' => 'nullable|string',
+        'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // Validate image
+    ]);
+
+    if ($validator->fails()) {
+        Log::error('Validation Errors:', $validator->errors()->toArray());
+        return response()->json(['errors' => $validator->errors()], 422);
+    }
+
+    $validatedData = $validator->validated();
+    Log::debug('Validated Data:', $validatedData);
+
+    // Handle the image upload if a new image is provided
+    if ($request->hasFile('image')) {
+
+        // Delete old image if it exists
+        if ($product->image && Storage::exists($product->image)) {
+            Storage::delete($product->image);
+        }
+
+        $imagePath = $request->file('image')->store('public/images');
+        $validatedData['image'] = $imagePath;
+
+    } else {
+        // If no new image is provided, remove 'image' from the update data
+        unset($validatedData['image']);
+    }
+
+    // Update the product with validated data
+    $product->update($validatedData);
+
+
+    return response()->json($product, 200);
+}
 
     public function destroy($id)
     {
@@ -67,8 +117,13 @@ class ProductController extends Controller
         if (is_null($product)) {
             return response()->json(['message' => 'Product not found'], 404);
         }
+
+        // Delete the image if it exists
+        if ($product->image && Storage::exists($product->image)) {
+            Storage::delete($product->image);
+        }
+
         $product->delete();
         return response()->json(null, 204);
     }
 }
-
