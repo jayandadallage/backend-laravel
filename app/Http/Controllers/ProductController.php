@@ -8,7 +8,7 @@ class ProductController extends Controller
 {
     public function index()
     {
-        $products = Product::all();
+        $products = Product::all()->where("created_by",Auth::user()->id);
         return response()->json($products, 200);
     }
 
@@ -27,13 +27,13 @@ class ProductController extends Controller
             $validatedData['image'] = $imagePath;
         }
         try{
-            // $product = Product::create($validatedData);
-            $product=Product::insertGetId([
+            $product=Product::create([
                 'name' => $validatedData['name'],
                 'price' => $validatedData['price'],
                 'description' => $validatedData['description'],
                 'image' => $validatedData['image'],
-                'created_by' =>Auth::user()->id
+                'created_by' =>Auth::id(),
+                'created_at' => NOW()
             ]);
             return response()->json($product, 201);
         }catch(\Exception $e){

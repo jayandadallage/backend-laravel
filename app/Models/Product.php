@@ -18,6 +18,8 @@ class Product extends Model
         'price',
         'description',
         'image',
+        'created_by',
+        'created_at'
     ];
 
 }
